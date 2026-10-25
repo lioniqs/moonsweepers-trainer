@@ -66,13 +66,7 @@ bool Process::write(uintptr_t address, const void* data, size_t size) const {
            done == size;
 }
 
-std::vector<uintptr_t> Process::find_all(const void* pattern, size_t length, size_t align,
-                                         bool writable_only) const {
-    std::vector<uintptr_t> hits;
-    if (length == 0 || align == 0) {
-        return hits;
-    }
-    const auto* pat = static_cast<const unsigned char*>(pattern);
+void Process::for_each_chunk(bool writable_only, size_t overlap, const ChunkFn& fn) const {
     const DWORD wanted = writable_only ? kWritable : kReadable;
     std::vector<unsigned char> buf;
 
@@ -90,36 +84,93 @@ std::vector<uintptr_t> Process::find_all(const void* pattern, size_t length, siz
         }
 
         for (size_t off = 0; off < size; off += kChunk) {
-            // Read `length - 1` extra bytes so matches that straddle chunks are not missed;
-            // only matches that start inside this chunk's own range are reported.
             const size_t own = std::min(kChunk, size - off);
-            const size_t n = std::min(own + length - 1, size - off);
-            if (n < length) {
-                continue;
-            }
+            const size_t n = std::min(own + overlap, size - off);
             buf.resize(n);
             if (!read(base + off, buf.data(), n)) {
                 continue;
             }
-            const unsigned char* p = buf.data();
-            const unsigned char* const end = p + (n - length + 1);
+            fn(base + off, buf.data(), own, n);
+        }
+    }
+}
+
+std::vector<std::vector<uintptr_t>> Process::find_patterns(const std::vector<std::string>& patterns,
+                                                          size_t align, bool writable_only) const {
+    std::vector<std::vector<uintptr_t>> hits(patterns.size());
+    if (align == 0) {
+        return hits;
+    }
+    size_t overlap = 0;
+    for (const std::string& p : patterns) {
+        if (!p.empty()) {
+            overlap = std::max(overlap, p.size() - 1);
+        }
+    }
+
+    for_each_chunk(writable_only, overlap,
+                   [&](uintptr_t base, const unsigned char* data, size_t own, size_t n) {
+        for (size_t k = 0; k < patterns.size(); ++k) {
+            const std::string& pat = patterns[k];
+            const size_t length = pat.size();
+            if (length == 0 || n < length) {
+                continue;
+            }
+            const unsigned char first = static_cast<unsigned char>(pat[0]);
+            const unsigned char* p = data;
+            const unsigned char* const end = data + (n - length + 1);
             while (p < end) {
                 p = static_cast<const unsigned char*>(
-                    std::memchr(p, pat[0], static_cast<size_t>(end - p)));
+                    std::memchr(p, first, static_cast<size_t>(end - p)));
                 if (p == nullptr) {
                     break;
                 }
-                const size_t idx = static_cast<size_t>(p - buf.data());
-                if (idx < own && std::memcmp(p, pat, length) == 0) {
-                    const uintptr_t addr = base + off + idx;
+                const size_t idx = static_cast<size_t>(p - data);
+                if (idx < own && std::memcmp(p, pat.data(), length) == 0) {
+                    const uintptr_t addr = base + idx;
                     if (addr % align == 0) {
-                        hits.push_back(addr);
+                        hits[k].push_back(addr);
                     }
                 }
                 ++p;
             }
         }
+    });
+    return hits;
+}
+
+std::vector<uintptr_t> Process::find_all(const void* pattern, size_t length, size_t align,
+                                         bool writable_only) const {
+    const std::string pat(static_cast<const char*>(pattern), length);
+    return find_patterns({pat}, align, writable_only)[0];
+}
+
+std::vector<std::pair<uintptr_t, uint64_t>> Process::find_qwords(
+    const std::vector<uint64_t>& values, bool writable_only) const {
+    std::vector<std::pair<uintptr_t, uint64_t>> hits;
+    std::vector<uint64_t> sorted = values;
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    if (sorted.empty()) {
+        return hits;
     }
+    const uint64_t lo = sorted.front();
+    const uint64_t hi = sorted.back();
+
+    for_each_chunk(writable_only, 0,
+                   [&](uintptr_t base, const unsigned char* data, size_t own, size_t) {
+        const size_t words = own / sizeof(uint64_t);
+        for (size_t i = 0; i < words; ++i) {
+            uint64_t v;
+            std::memcpy(&v, data + i * sizeof(uint64_t), sizeof(v));
+            if (v < lo || v > hi) {
+                continue;
+            }
+            if (std::binary_search(sorted.begin(), sorted.end(), v)) {
+                hits.emplace_back(base + i * sizeof(uint64_t), v);
+            }
+        }
+    });
     return hits;
 }
 

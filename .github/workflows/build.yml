@@ -56,7 +56,7 @@ jobs:
       - name: Smoke test
         shell: pwsh
         run: |
-          $out = & .\build\Release\moonsweepers-trainer.exe --version
+          $out = & .\build\Release\moonsweepers-trainer-cli.exe --version
           if ($out -ne $env:VERSION) { throw "version mismatch: '$out' vs '$env:VERSION'" }
 
       - name: Package
@@ -64,7 +64,7 @@ jobs:
         run: |
           $name = "moonsweepers-trainer-v$($env:VERSION)-win-x64"
           New-Item -ItemType Directory -Path "dist/$name" | Out-Null
-          Copy-Item build/Release/moonsweepers-trainer.exe, README.md, LICENSE -Destination "dist/$name"
+          Copy-Item build/Release/moonsweepers-trainer.exe, build/Release/moonsweepers-trainer-cli.exe, README.md, LICENSE -Destination "dist/$name"
           Compress-Archive -Path "dist/$name/*" -DestinationPath "dist/$name.zip"
           Remove-Item -Recurse -Force "dist/$name"
           $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
