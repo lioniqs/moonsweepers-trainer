@@ -7,7 +7,9 @@ version) with:
 - **Teleport and rewards**: sets the game's own teleport price to 0 and lets you change the reward per flag / per
   landing site.
 - **Navigator**: all 195 country flags and 26 landing sites with latitude/longitude, the distance from you and the
-  direction relative to where you are facing. Double-click a row (or press *Copy coordinates*) to copy it.
+  direction relative to where you are facing. Places already raised in the game are ticked, you can tick more by
+  hand, add **marks of your own**, and open a small always-on-top **compass** window that guides you to the place
+  you picked.
 
 > The game is **co-op** (crews). Use the trainer only in your own session. Changing the wallet or prices in somebody
 > else's crew spoils the game for them. This is an unofficial fan tool and is not affiliated with the developers.
@@ -16,7 +18,9 @@ version) with:
 
 Get `moonsweepers-trainer-vX.Y.Z-win-x64.zip` from the [Releases](../../releases) page. It contains
 
-- `moonsweepers-trainer.exe` - the window,
+- `moonsweepers-trainer.exe` - the full window (wallet, prices, navigator),
+- `moonsweepers-navigator.exe` - the same navigator **without any write access**: it only reads the game and never
+  changes it, so it is the one to use in a crew with other players,
 - `moonsweepers-trainer-cli.exe` - the command-line version.
 
 A SHA-256 file is published next to each archive. Start the game, load into a session (not just the main menu), then
@@ -30,10 +34,22 @@ run the trainer. If the game process cannot be opened, run the trainer as admini
 | Free in-game teleport | sets `MoonWorld.TeleportPrice` (50 by default) to 0; unchecking restores the original |
 | Rewards | edits the reward per flag (100) and per site (250); *Restore originals* puts everything back |
 | Player | your position, latitude and longitude on the Moon |
-| Navigator | sort by any column (click the header); filter flags/sites; search by name |
+| Navigator | sort by any column (click the header); filter All / Flags / Sites / My marks / Not visited / Visited; search by name |
+| Seen column | ✓ = already raised in the game, ● = ticked by you (*Toggle "visited"*) |
+| Guide me there | opens the compass window for the selected place (double-click a row does the same) |
+| My marks | *Mark my position* saves where you stand under the name you typed; *Delete my mark* removes it |
+
+### The compass
+
+*Guide me there* opens a small window that stays on top of the game (it works with the game in windowed or borderless
+mode). It shows the target's name, the distance along the surface and an arrow that points the way relative to
+where you are facing; it turns green when you face the target and says *You are here* within 15 m.
+
+Your marks and the ticks you set by hand are stored in `%APPDATA%\MoonSweepersTrainer` (`marks.txt`, `visited.txt`),
+so they survive restarts. The game's own "raised" state is read live from the game, not from save files.
 
 The trainer does **not** move the player by itself. It makes the game's own teleport free and tells you where each
-flag and site is and which way to go. Original prices and rewards are restored when you close the window.
+place is and which way to go. Original prices and rewards are restored when you close the window.
 
 ## Command line
 
@@ -67,7 +83,8 @@ Nothing is hard-coded to an address. On start the trainer reads the IL2CPP runti
 4. The balance is a `System.Decimal` (`flags`, `hi32`, `lo64`) in `TeamWallet.Balance`, referenced by
    `MoonWorld.wallets`. Prices and rewards are static `Decimal` fields of `MoonWorld`.
 5. Landmarks: `MoonLandmarks.all` holds names and coordinates, `MoonWorld.landmarkDirections` holds a unit vector
-   per landmark. The player's position comes from `MoonWalker.previousPosition`.
+   per landmark and `MoonWorld.landmarkRaised` which of them are already raised. The player's position comes from
+   `MoonWalker.previousPosition` and the facing direction from `MoonWalker.heading`.
 
 Before every write the trainer re-checks that the object header still points at the class. A game update that renames
 or moves these fields can break it; please open an issue if so.
@@ -108,7 +125,10 @@ MIT, see [LICENSE](LICENSE).
 - **Кошелёк команды**: установить баланс или держать заданную сумму.
 - **Телепорт и награды**: ставит цену встроенного телепорта игры в 0, меняет награду за флаг и за метку.
 - **Навигатор**: все 195 флагов стран и 26 мест посадок с широтой и долготой, расстоянием от тебя и направлением
-  относительно того, куда ты смотришь. Двойной клик по строке копирует координаты.
+  относительно того, куда ты смотришь. Уже поднятые в игре места отмечены, можно отмечать вручную, добавлять **свои
+  точки** и открывать маленькое окно-**компас** поверх игры, которое ведёт к выбранному месту (двойной клик по строке).
+  Отдельный `moonsweepers-navigator.exe` только читает игру и ничего в ней не меняет: его можно держать открытым и в
+  кооперативе. Свои точки и отметки хранятся в `%APPDATA%\MoonSweepersTrainer`.
 
 Игра кооперативная: пользуйся только в своей сессии, не в чужих экипажах. Трейнер не перемещает игрока сам: он
 делает бесплатным телепорт игры и показывает, где каждый флаг и метка. Запусти игру, загрузи сессию, затем

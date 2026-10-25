@@ -64,7 +64,7 @@ jobs:
         run: |
           $name = "moonsweepers-trainer-v$($env:VERSION)-win-x64"
           New-Item -ItemType Directory -Path "dist/$name" | Out-Null
-          Copy-Item build/Release/moonsweepers-trainer.exe, build/Release/moonsweepers-trainer-cli.exe, README.md, LICENSE -Destination "dist/$name"
+          Copy-Item build/Release/moonsweepers-trainer.exe, build/Release/moonsweepers-navigator.exe, build/Release/moonsweepers-trainer-cli.exe, README.md, LICENSE -Destination "dist/$name"
           Compress-Archive -Path "dist/$name/*" -DestinationPath "dist/$name.zip"
           Remove-Item -Recurse -Force "dist/$name"
           $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()

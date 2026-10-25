@@ -113,6 +113,7 @@ std::shared_ptr<Game> Game::attach(std::string& error) {
     }
 
     // Static prices and rewards.
+    g->raised_offset_ = world->offset_of("landmarkRaised");
     g->world_statics_ = world->static_fields;
     g->teleport_price_offset_ = world->offset_of("TeleportPrice");
     g->flag_reward_offset_ = world->offset_of("FlagReward");
@@ -128,6 +129,9 @@ std::shared_ptr<Game> Game::attach(std::string& error) {
         }
         Landmark lm;
         lm.code = il2cpp::read_string(p, value_at<uint64_t>(p, obj + landmark->offset_of("code")));
+        if (landmark->offset_of("id") >= 0) {
+            lm.id = il2cpp::read_string(p, value_at<uint64_t>(p, obj + landmark->offset_of("id")));
+        }
         lm.name = il2cpp::read_string(p, value_at<uint64_t>(p, obj + landmark->offset_of("name")));
         lm.lat = value_at<float>(p, obj + landmark->offset_of("latitude"));
         lm.lon = value_at<float>(p, obj + landmark->offset_of("longitude"));
@@ -138,6 +142,9 @@ std::shared_ptr<Game> Game::attach(std::string& error) {
         }
         if (lm.name.empty()) {
             lm.name = lm.code;
+        }
+        if (lm.id.empty()) {
+            lm.id = (lm.flag ? "flag/" : "site/") + lm.code;
         }
         g->landmarks_.push_back(std::move(lm));
     }
@@ -186,6 +193,19 @@ bool Game::read_setting(Setting which, Decimal& out) const {
 bool Game::write_setting(Setting which, const Decimal& value) const {
     const uintptr_t a = setting_address(which);
     return a != 0 && value.valid() && process_.write(a, &value, sizeof(value));
+}
+
+bool Game::read_raised(std::vector<uint8_t>& out) const {
+    if (raised_offset_ < 0) {
+        return false;
+    }
+    const uintptr_t arr = value_at<uint64_t>(process_, world_ + static_cast<uintptr_t>(raised_offset_));
+    const uint64_t count = arr != 0 ? value_at<uint64_t>(process_, arr + kArrayLength) : 0;
+    if (count == 0 || count > 5000) {
+        return false;
+    }
+    out.resize(static_cast<size_t>(count));
+    return process_.read(arr + kArrayData, out.data(), out.size());
 }
 
 bool Game::player(Vec3& position, Vec3& heading) const {

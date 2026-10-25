@@ -19,6 +19,7 @@ struct Vec3 {
 struct Landmark {
     int index = 0;
     bool flag = true;      // false: landing site
+    std::string id;        // stable id such as "flag/ad" or "site/odysseus"
     std::string code;
     std::string name;
     float lat = 0;         // degrees
@@ -46,6 +47,9 @@ public:
     bool read_setting(Setting which, Decimal& out) const;
     bool write_setting(Setting which, const Decimal& value) const;
 
+    // Which landmarks the crew has already raised (indexed like Landmark::index).
+    bool read_raised(std::vector<uint8_t>& out) const;
+
     // Local player: last known position and facing direction (world space, Moon centre at origin).
     bool player(Vec3& position, Vec3& heading) const;
 
@@ -66,6 +70,7 @@ private:
     int32_t teleport_price_offset_ = -1;
     int32_t flag_reward_offset_ = -1;
     int32_t site_reward_offset_ = -1;
+    int32_t raised_offset_ = -1;
     int32_t position_offset_ = 0;
     int32_t heading_offset_ = 0;
 };
