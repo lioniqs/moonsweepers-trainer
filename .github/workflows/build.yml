@@ -1,0 +1,99 @@
+name: build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          } else {
+            $version = '0.0.0-dev.' + $env:GITHUB_SHA.Substring(0, 7)
+          }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          cmake -S . -B build -A x64 "-DTRAINER_VERSION=$version"
+          exit $LASTEXITCODE
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release 2>&1 | Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            # Surface compiler errors as annotations so they are readable without opening the log.
+            Select-String -Path build.log -Pattern 'error|fatal' |
+              Select-Object -First 15 |
+              ForEach-Object { Write-Host "::error::$($_.Line.Trim())" }
+          }
+          exit $code
+
+      - name: Unit tests
+        shell: pwsh
+        run: |
+          ctest --test-dir build -C Release --output-on-failure 2>&1 | Tee-Object -FilePath test.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Select-String -Path test.log -Pattern 'FAIL' |
+              Select-Object -First 15 |
+              ForEach-Object { Write-Host "::error::$($_.Line.Trim())" }
+          }
+          exit $code
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $out = & .\build\Release\moonsweepers-trainer.exe --version
+          if ($out -ne $env:VERSION) { throw "version mismatch: '$out' vs '$env:VERSION'" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "moonsweepers-trainer-v$($env:VERSION)-win-x64"
+          New-Item -ItemType Directory -Path "dist/$name" | Out-Null
+          Copy-Item build/Release/moonsweepers-trainer.exe, README.md, LICENSE -Destination "dist/$name"
+          Compress-Archive -Path "dist/$name/*" -DestinationPath "dist/$name.zip"
+          Remove-Item -Recurse -Force "dist/$name"
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Set-Content -Path "dist/$name.zip.sha256" -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonsweepers-trainer
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: moonsweepers-trainer
+          path: dist
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=""
+          case "$GITHUB_REF_NAME" in *-*) flags="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes $flags
